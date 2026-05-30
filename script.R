@@ -16,7 +16,6 @@ library(treemapify)  # install.packages("treemapify")
 cars <- mpg
 gap  <- gapminder
 
-
 ####################
 # COUNTING AMOUNTS #
 ####################
@@ -129,10 +128,9 @@ ggplot(cars, aes(x = hwy, y = reorder(class, hwy, median), fill = class)) +
   ) +
   theme_minimal()
 
-
-####################
-# CHANGE OVER TIME #
-####################
+###############
+# TIME SERIES #
+###############
 
 ## Line - evolución de la esperanza de vida media mundial ##
 gap %>%
@@ -177,6 +175,251 @@ gap %>%
   ) +
   theme_minimal()
 
+## Column - población mundial total por año ##
+gap %>%
+  group_by(year) %>%
+  summarise(total_pop = sum(pop), .groups = "drop") %>%
+  ggplot(aes(x = factor(year), y = total_pop)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = "Evolución de la población mundial",
+    x = "Año",
+    y = "Población total"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+## Line + column - población y esperanza de vida media mundial ##
+gap %>%
+  group_by(year) %>%
+  summarise(
+    total_pop = sum(pop),
+    mean_life = mean(lifeExp),
+    .groups = "drop"
+  ) %>%
+  ggplot(aes(x = year)) +
+  geom_col(aes(y = total_pop / 100000000), fill = "lightblue", alpha = 0.7) +
+  geom_line(aes(y = mean_life), color = "steelblue", linewidth = 1.2) +
+  geom_point(aes(y = mean_life), color = "steelblue", size = 2) +
+  labs(
+    title = "Población mundial y esperanza de vida media",
+    subtitle = "Las columnas muestran población escalada y la línea esperanza de vida",
+    x = "Año",
+    y = "Esperanza de vida / Población escalada"
+  ) +
+  theme_minimal()
+
+#############
+# MAGNITUDE #
+#############
+
+## Lollipop - consumo medio en carretera por clase ##
+cars %>%
+  group_by(class) %>%
+  summarise(mean_hwy = mean(hwy)) %>%
+  ggplot(aes(x = mean_hwy, y = reorder(class, mean_hwy))) +
+  geom_segment(aes(x = 0, xend = mean_hwy, yend = class), color = "grey60") +
+  geom_point(size = 4, color = "steelblue") +
+  labs(
+    title = "Consumo medio en carretera por clase",
+    x = "Millas por galón (hwy)",
+    y = "Clase"
+  ) +
+  theme_minimal()
+
+## Diverging bar - diferencia de consumo respecto a la media global ##
+cars %>%
+  group_by(class) %>%
+  summarise(mean_hwy = mean(hwy)) %>%
+  mutate(diff = mean_hwy - mean(mean_hwy)) %>%
+  ggplot(aes(x = diff, y = reorder(class, diff), fill = diff > 0)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("TRUE" = "steelblue", "FALSE" = "tomato"),
+                    labels = c("TRUE" = "Sobre la media", "FALSE" = "Bajo la media")) +
+  labs(
+    title = "Desviación del consumo en carretera respecto a la media",
+    x = "Diferencia respecto a la media (mpg)",
+    y = "Clase",
+    fill = ""
+  ) +
+  theme_minimal()
+
+## Paired column
+
+## Paired bar
+
+library(fmsb)       # install.packages("fmsb")
+library(ggforce)    # install.packages("ggforce")
+
+## Radar chart - perfil medio de coches por clase ##
+radar_data <- cars %>%
+  group_by(class) %>%
+  summarise(
+    Ciudad = mean(cty),
+    Carretera = mean(hwy),
+    Cilindros = mean(cyl),
+    Motor = mean(displ),
+    .groups = "drop"
+  )
+
+radar_scaled <- radar_data %>%
+  column_to_rownames("class") %>%
+  mutate(across(everything(), scales::rescale))
+
+radar_plot_data <- rbind(
+  max = rep(1, ncol(radar_scaled)),
+  min = rep(0, ncol(radar_scaled)),
+  radar_scaled
+)
+
+radarchart(
+  radar_plot_data,
+  axistype = 1,
+  pcol = "steelblue",
+  pfcol = scales::alpha("lightblue", 0.4),
+  plwd = 2,
+  cglcol = "grey",
+  cglty = 1,
+  axislabcol = "grey40",
+  title = "Perfil medio de las clases de coche"
+)
+
+## Bullet chart
+
+###############
+# PROPORTIONS #
+###############
+
+## Stacked bars - cantidad de coches por clase y tracción ##
+ggplot(cars, aes(x = class, fill = drv)) +
+  geom_bar(position = "stack") +
+  labs(
+    title = "Cantidad de coches por clase y tipo de tracción",
+    x = "Clase",
+    y = "Cantidad",
+    fill = "Tracción"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+## Pie chart - proporción de coches por tracción ##
+cars %>%
+  count(drv) %>%
+  ggplot(aes(x = "", y = n, fill = drv)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y") +
+  labs(title = "Proporción de coches por tipo de tracción", fill = "Tracción") +
+  theme_void()
+
+## Treemap - número de modelos por fabricante ##
+cars %>%
+  count(manufacturer) %>%
+  ggplot(aes(area = n, fill = manufacturer, label = manufacturer)) +
+  geom_treemap() +
+  geom_treemap_text(colour = "white", place = "centre", reflow = TRUE) +
+  labs(title = "Modelos por fabricante (Treemap)") +
+  theme(legend.position = "none")
+
+## Stacked bars 100% - proporción de tracción por clase ##
+ggplot(cars, aes(x = class, fill = drv)) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Proporción de tracción por clase de coche",
+    x = "Clase",
+    y = "Proporción",
+    fill = "Tracción"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+## Donut - proporción de coches por tracción ##
+cars %>%
+  count(drv) %>%
+  mutate(drv = recode(drv,
+                      "4" = "4 ruedas",
+                      "f" = "Delantera",
+                      "r" = "Trasera")) %>%
+  ggplot(aes(x = 2, y = n, fill = drv)) +
+  geom_col(color = "white") +
+  coord_polar(theta = "y") +
+  xlim(0.5, 2.5) +
+  labs(
+    title = "Proporción de coches por tipo de tracción",
+    fill = "Tracción"
+  ) +
+  theme_void()
+
+## Venn - coches eficientes en ciudad, carretera y motor pequeño ##
+# install.packages("ggVennDiagram")
+library(ggVennDiagram)
+venn_data <- list(
+  "Ciudad eficiente" = cars %>%
+    filter(cty > mean(cty)) %>%
+    pull(model),
+  
+  "Carretera eficiente" = cars %>%
+    filter(hwy > mean(hwy)) %>%
+    pull(model),
+  
+  "Motor pequeño" = cars %>%
+    filter(displ < mean(displ)) %>%
+    pull(model)
+)
+
+ggVennDiagram(venn_data, label_alpha = 0) +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  labs(
+    title = "Relación entre eficiencia en ciudad, carretera y motor pequeño"
+  ) +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    legend.position = "none"
+  )
+
+###########
+# SPATIAL #
+###########
+ 
+
+########
+# FLOW #
+########
+
+###########
+# RANKING #
+###########
+
+## Ordered bar - consumo medio en carretera por fabricante ##
+cars %>%
+  group_by(manufacturer) %>%
+  summarise(mean_hwy = mean(hwy)) %>%
+  ggplot(aes(x = mean_hwy, y = reorder(manufacturer, mean_hwy))) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(
+    title = "Consumo medio en carretera por fabricante (ordenado)",
+    x = "Millas por galón (hwy)",
+    y = "Fabricante"
+  ) +
+  theme_minimal()
+
+## Slope chart - esperanza de vida 1952 vs 2007 por continente ##
+gap %>%
+  filter(year %in% c(1952, 2007)) %>%
+  group_by(continent, year) %>%
+  summarise(mean_life = mean(lifeExp), .groups = "drop") %>%
+  ggplot(aes(x = factor(year), y = mean_life, group = continent, color = continent)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  labs(
+    title = "Esperanza de vida por continente: 1952 vs 2007",
+    x = "Año",
+    y = "Esperanza de vida media (años)",
+    color = "Continente"
+  ) +
+  theme_minimal()
 
 ###############
 # CORRELATION #
@@ -224,110 +467,3 @@ cars %>%
     fill = "hwy (mpg)"
   ) +
   theme_minimal()
-
-
-################
-# PART-TO-WHOLE #
-################
-
-## Pie chart - proporción de coches por tracción ##
-cars %>%
-  count(drv) %>%
-  ggplot(aes(x = "", y = n, fill = drv)) +
-  geom_bar(stat = "identity", width = 1) +
-  coord_polar("y") +
-  labs(title = "Proporción de coches por tipo de tracción", fill = "Tracción") +
-  theme_void()
-
-## Treemap - número de modelos por fabricante ##
-cars %>%
-  count(manufacturer) %>%
-  ggplot(aes(area = n, fill = manufacturer, label = manufacturer)) +
-  geom_treemap() +
-  geom_treemap_text(colour = "white", place = "centre", reflow = TRUE) +
-  labs(title = "Modelos por fabricante (Treemap)") +
-  theme(legend.position = "none")
-
-## Stacked bars 100% - proporción de tracción por clase ##
-ggplot(cars, aes(x = class, fill = drv)) +
-  geom_bar(position = "fill") +
-  scale_y_continuous(labels = scales::percent) +
-  labs(
-    title = "Proporción de tracción por clase de coche",
-    x = "Clase",
-    y = "Proporción",
-    fill = "Tracción"
-  ) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-
-#############
-# MAGNITUDE #
-#############
-
-## Lollipop - consumo medio en carretera por clase ##
-cars %>%
-  group_by(class) %>%
-  summarise(mean_hwy = mean(hwy)) %>%
-  ggplot(aes(x = mean_hwy, y = reorder(class, mean_hwy))) +
-  geom_segment(aes(x = 0, xend = mean_hwy, yend = class), color = "grey60") +
-  geom_point(size = 4, color = "steelblue") +
-  labs(
-    title = "Consumo medio en carretera por clase",
-    x = "Millas por galón (hwy)",
-    y = "Clase"
-  ) +
-  theme_minimal()
-
-## Diverging bar - diferencia de consumo respecto a la media global ##
-cars %>%
-  group_by(class) %>%
-  summarise(mean_hwy = mean(hwy)) %>%
-  mutate(diff = mean_hwy - mean(mean_hwy)) %>%
-  ggplot(aes(x = diff, y = reorder(class, diff), fill = diff > 0)) +
-  geom_bar(stat = "identity") +
-  scale_fill_manual(values = c("TRUE" = "steelblue", "FALSE" = "tomato"),
-                    labels = c("TRUE" = "Sobre la media", "FALSE" = "Bajo la media")) +
-  labs(
-    title = "Desviación del consumo en carretera respecto a la media",
-    x = "Diferencia respecto a la media (mpg)",
-    y = "Clase",
-    fill = ""
-  ) +
-  theme_minimal()
-
-
-###########
-# RANKING #
-###########
-
-## Ordered bar - consumo medio en carretera por fabricante ##
-cars %>%
-  group_by(manufacturer) %>%
-  summarise(mean_hwy = mean(hwy)) %>%
-  ggplot(aes(x = mean_hwy, y = reorder(manufacturer, mean_hwy))) +
-  geom_bar(stat = "identity", fill = "steelblue") +
-  labs(
-    title = "Consumo medio en carretera por fabricante (ordenado)",
-    x = "Millas por galón (hwy)",
-    y = "Fabricante"
-  ) +
-  theme_minimal()
-
-## Slope chart - esperanza de vida 1952 vs 2007 por continente ##
-gap %>%
-  filter(year %in% c(1952, 2007)) %>%
-  group_by(continent, year) %>%
-  summarise(mean_life = mean(lifeExp), .groups = "drop") %>%
-  ggplot(aes(x = factor(year), y = mean_life, group = continent, color = continent)) +
-  geom_line(linewidth = 1.2) +
-  geom_point(size = 3) +
-  labs(
-    title = "Esperanza de vida por continente: 1952 vs 2007",
-    x = "Año",
-    y = "Esperanza de vida media (años)",
-    color = "Continente"
-  ) +
-  theme_minimal()
-
