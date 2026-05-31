@@ -16,6 +16,110 @@ library(treemapify)  # install.packages("treemapify")
 cars <- mpg
 gap  <- gapminder
 
+##################
+# Procesing data #
+##################
+
+#df <- read.csv("dataset.csv")
+
+## Primer vistazo ##
+#head(df)
+#dim(df)
+#colnames(df)
+
+
+## Estructura ##
+#str(df)
+
+
+## Resumen estadístico ##
+#summary(df)
+
+
+## Valores perdidos ##
+#colSums(is.na(df))
+#sum(is.na(df))
+#dim(df)
+#dim(na.omit(df))
+
+
+## Duplicados ##
+#sum(duplicated(df))
+
+
+## Tablas para categóricas ##
+#table(df$variable_categorica)
+
+
+## Resumen de numéricas ##
+#summary(df$variable_numerica)
+
+###############################
+# Choosing graphs and questions
+###############################
+
+## 1. Distribución de variables numéricas ##
+# Pregunta: ¿Cómo se distribuye esta variable?
+# Gráficos útiles: histograma, boxplot, density plot
+
+# ggplot(df, aes(x = variable_numerica)) +
+#   geom_histogram()
+
+# ggplot(df, aes(y = variable_numerica)) +
+#   geom_boxplot()
+
+
+## 2. Frecuencia de variables categóricas ##
+# Pregunta: ¿Qué categorías aparecen más o menos?
+# Gráfico útil: barplot
+
+# ggplot(df, aes(x = variable_categorica)) +
+#   geom_bar()
+
+
+## 3. Relación entre dos variables numéricas ##
+# Pregunta: ¿Existe relación entre ambas variables?
+# Gráfico útil: scatter plot
+
+# ggplot(df, aes(x = variable_numerica_1, y = variable_numerica_2)) +
+#   geom_point()
+
+
+## 4. Comparación de una numérica entre categorías ##
+# Pregunta: ¿Una variable numérica cambia según el grupo?
+# Gráficos útiles: boxplot, violin plot, barplot con medias
+
+# ggplot(df, aes(x = variable_categorica, y = variable_numerica)) +
+#   geom_boxplot()
+
+
+## 5. Relación entre dos variables categóricas ##
+# Pregunta: ¿Hay asociación entre dos variables categóricas?
+# Gráficos útiles: barras agrupadas, barras apiladas
+
+# ggplot(df, aes(x = variable_categorica_1, fill = variable_categorica_2)) +
+#   geom_bar(position = "dodge")
+
+
+## 6. Evolución temporal ##
+# Pregunta: ¿Cómo cambia una variable a lo largo del tiempo?
+# Gráfico útil: line plot
+
+# ggplot(df, aes(x = variable_fecha, y = variable_numerica)) +
+#   geom_line()
+
+##################
+# Interpretation #
+##################
+
+#1. Qué gráfico he hecho.
+#2. Qué variable(s) analiza.
+#3. Qué patrón se observa.
+#4. Qué interpretación tiene.
+#5. Si hay outliers, sesgos, grupos destacados o limitaciones.
+
+
+
 ####################
 # COUNTING AMOUNTS #
 ####################
