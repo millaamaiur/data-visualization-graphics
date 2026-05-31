@@ -377,17 +377,83 @@ radar_plot_data <- rbind(
   radar_scaled
 )
 
+colors_border <- c("#DF536B", "#61D04F", "#2297E6", "#28E1E5", "#E6C122", "#B385FF", "#F59B33")
+colors_in <- scales::alpha(colors_border, 0.2)
+
 radarchart(
   radar_plot_data,
   axistype = 1,
-  pcol = "steelblue",
-  pfcol = scales::alpha("lightblue", 0.4),
+  pcol = colors_border,
+  pfcol = colors_in,
   plwd = 2,
   cglcol = "grey",
   cglty = 1,
   axislabcol = "grey40",
   title = "Perfil medio de las clases de coche"
 )
+
+legend(
+  x = "topright",                                  # Posición de la caja
+  legend = rownames(radar_plot_data)[-c(1,2)],     # Quita 'max' y 'min' de los nombres
+  bty = "n",                                       # Sin borde en la caja de la leyenda
+  pch = 20,                                        # Icono de punto sólido
+  col = colors_border,                             # Colores asignados
+  text.col = "grey20", 
+  pt.cex = 1.5, 
+  cex = 0.8
+)
+
+## Si usas la media hay que mostrar la distribucion
+cars_escalado <- cars %>%
+  mutate(
+    Ciudad    = rescale(cty),   # Usa 'cty' de tu tibble
+    Carretera = rescale(hwy),   # Usa 'hwy' de tu tibble
+    Cilindros = rescale(cyl),   # Usa 'cyl' de tu tibble
+    Motor     = rescale(displ)  # Usa 'displ' de tu tibble
+  ) %>%
+  select(class, Ciudad, Carretera, Cilindros, Motor)
+
+# 2. Pasamos a formato largo para poder facetar
+df_densidades_long <- cars_escalado %>%
+  pivot_longer(cols = c(Ciudad, Carretera, Cilindros, Motor), 
+               names_to = "Pregunta", 
+               values_to = "Rating")
+
+# 3. Lista de nombres para las etiquetas flotantes
+preguntas_radar <- c("Ciudad", "Carretera", "Cilindros", "Motor")
+
+# 4. Tu gráfico clonado
+ggplot(df_densidades_long, aes(x = Rating, fill = class, color = class)) +
+  geom_density(alpha = 0.4) +
+  
+  # Aplica los mismos colores que definiste para el spider plot
+  scale_fill_manual(values = colors_border) +
+  scale_color_manual(values = colors_border) +
+  
+  # Facetado en una sola columna vertical
+  facet_wrap(~ Pregunta, ncol = 1, scales = "free_y") +
+  
+  # El truco del geom_text para poner los títulos arriba a la izquierda (x = 0)
+  geom_text(
+    data = data.frame(Pregunta = preguntas_radar),
+    aes(x = 0, y = Inf, label = Pregunta),
+    inherit.aes = FALSE, vjust = 1.5, hjust = 0,
+    fontface = "bold", alpha = 0.7
+  ) +
+  
+  labs(
+    title = "Score Distributions by Car Class",
+    subtitle = "Comparing density of answers for Radar Chart variables",
+    x = "Rating (0-1 Scaled)",
+    y = "Density"
+  ) +
+  theme_minimal() +
+  theme(
+    strip.background = element_blank(), 
+    strip.text = element_blank(),       
+    panel.spacing = unit(1, "lines")    
+  )
+
 
 ## Bullet chart
 
@@ -398,6 +464,7 @@ radarchart(
 ## Stacked bars - cantidad de coches por clase y tracción ##
 ggplot(cars, aes(x = class, fill = drv)) +
   geom_bar(position = "stack") +
+  scale_fill_brewer(palette = "Pastel2") +
   labs(
     title = "Cantidad de coches por clase y tipo de tracción",
     x = "Clase",
@@ -571,3 +638,66 @@ cars %>%
     fill = "hwy (mpg)"
   ) +
   theme_minimal()
+
+
+###############
+# HIGH DIMENSIONALITY #
+###############
+
+## Alluvial plot - flujo de movimientos o tambien para hierarchical data
+
+library(easyalluvial)
+library(parcats)
+library(dplyr)
+
+# 2. Preparamos los datos de 'cars' seleccionando variables categóricas/discretas
+df_alluvial_cars <- cars %>%
+  select(
+    `Fabricante` = manufacturer,
+    `Cilindros`  = cyl,
+    `Traccion`   = drv,
+    `Clase`      = class
+  ) %>%
+  # Convertimos todo a caracteres/factores (obligatorio para flujos categóricos)
+  mutate(across(everything(), as.character))
+
+# 3. Creamos la estructura del alluvial (Formato ancho / Wide)
+p_alluvial_cars <- alluvial_wide(
+  data = df_alluvial_cars, 
+  fill_by = 'first_variable' # El color del flujo dependerá del Fabricante
+)
+
+# 4. Lo convertimos en gráfico interactivo
+parcats(
+  p_alluvial_cars, 
+  data_input = df_alluvial_cars,
+  marginal_histograms = TRUE, 
+  hoverinfo = "count+probability",
+  width = 1100, 
+  height = 700
+)
+
+## Parcoords - se puede con el mismo dataframe, el formato es el mismo
+install.packages("remotes")
+remotes::install_github("timelyportfolio/parcoords")
+install.packages("d3r")
+library(parcoords)
+library(dplyr)
+
+# 2. Definimos tus 7 colores (uno para cada una de las 7 clases de coche)
+all_colors <- c("#DF536B", "#61D04F", "#2297E6", "#28E1E5", "#E6C122", "#B385FF", "#F59B33")
+
+# 3. Lanzamos el gráfico calcado a tus apuntes
+parcoords(
+  cars %>% select("cty", "hwy", "cyl", "displ", "year", "class"),
+  reorderable = TRUE,
+  brushMode = "1d-axes",
+  rownames = FALSE,
+  color = list(
+    colorBy = "class",           # Agrupa y colorea por tipo de coche (SUV, Compact...)
+    colorScale = "scaleOrdinal", # Al ser texto (categorías), usamos escala ordinal
+    colorScheme = all_colors
+  ),
+  alpha = 0.4,                   # Te sugiero subir el alpha a 0.4; 0.02 es demasiado invisible para 234 filas
+  withD3 = TRUE
+)
