@@ -1,0 +1,438 @@
+---
+title: "Classroom Data Analysis"
+author: "Amaiur Milla Domingo"
+date: "2026-05-05"
+format:
+  html:
+    toc: true
+    theme: cosmo
+    code-fold: true
+    embed-resources: true
+editor: visual
+---
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: false
+set.seed(42)
+data <- type.convert(as.data.frame(t(read.csv("classroomData.csv", row.names = 1))), as.is = TRUE)
+
+library(ggplot2)
+library(tidyverse)
+library(reshape2)
+library(dplyr)
+library(plotly)
+library(GGally)
+library(FactoMineR)
+library(Rtsne)
+library(umap)
+library(ggrepel)
+library(proxy)
+```
+
+## Introduction
+
+The goal of this analysis is to see where I am located in the classroom by comparing myself to the rest of my classmates. To achieve this, I'm going to use a set of techniques that we have seen in class to infer the structure of the high-dimensional feature space.
+
+All plots in this report are interactive, as it is designed to be read in HTML format on a laptop. This allows variable names to be omitted from the axes, since the exact values and labels can be accessed simply by hovering over the plot.
+
+## Dataset Dimensions
+
+```{r}
+#| code-fold: true
+#| echo: true
+dimensions <- dim(data)
+numeric <- sum(sapply(data,is.numeric))
+categoric <- sum(!sapply(data,is.numeric))
+```
+
+The dataset used to perform this analysis has `r dimensions[1]` rows and `r dimensions[2]` columns. Out of this `r dimensions[2]` variables we have `r numeric` **numeric** and `r categoric` **categoric** variables.
+
+Numeric variables are measured on a scale from **0 to 5**.
+
+We can distinguish three categories between the variables: Academic, sports and leisure and artistic variables.
+
+## Preprocessing
+
+Before performing any analysis I decided to change the variable (column) names to shorter versions of them. This will help visually in the plots and when coding.
+
+No missing values or outliers were found.
+
+# General Overview of the dataset
+
+## Correlation Matrix between variables
+
+```{r}
+#| code-fold: true
+#| echo: true
+
+numeric_cols <- data[, sapply(data, is.numeric)]
+cor_matrix <- cor(numeric_cols, use = "complete.obs", method = "pearson")
+
+correlations <- melt(cor_matrix) %>% filter(!Var1 == Var2) %>% 
+  filter(as.numeric(factor(Var1))>as.numeric(factor(Var2)))
+#Transform the correlation matrix into a dataframe (so ggplot can read it)
+
+corMatrix <- ggplot(correlations, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") + #Every cell is a tile
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = mean(correlations$value), limit = c(min(correlations$value),max(correlations$value))) + 
+  theme_void() + theme(axis.text.x = element_blank(), axis.text.y = element_blank())
+
+ggplotly(corMatrix) %>% config(displayModeBar = FALSE) %>% layout(legend = list(x = -1, y = 0.5))
+```
+
+We can see there are positive correlations between variables such as "Acting" and "Degree" or "Playing Music" and "Research". There are negative correlations between "Painting" and "Practicing Sports" or "Research" and "Industry"
+
+## Correlation Matrix between observations
+
+```{r}
+#| code-fold: true
+#| echo: true
+
+numeric_cols <- data[, sapply(data, is.numeric)]
+cor_matrix <- cor(t(numeric_cols), use = "complete.obs", method = "pearson")
+
+correlations <- melt(cor_matrix) %>% filter(!Var1 == Var2) %>% 
+  filter(as.numeric(factor(Var1))>as.numeric(factor(Var2)))
+#Transform the correlation matrix into a dataframe (so ggplot can read it)
+
+corMatrix <- ggplot(correlations, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") + #Every cell is a tile
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = mean(correlations$value), limit = c(min(correlations$value),max(correlations$value))) + 
+  theme_void() + theme(axis.text.x = element_blank(), axis.text.y = element_blank())
+
+ggplotly(corMatrix) %>% config(displayModeBar = FALSE) %>% layout(legend = list(x = -1, y = 0.5))
+```
+
+Some students have similar profiles as we can see in this plot. Malena and Nahia have the highest correlation which means that they have answered in a very similar way. However, there are students with negative correlation. For instance, Paul and Nikole have a negative correlation that suggests that they have answered differently.
+
+## Heatmap
+
+```{r}
+#| code-fold: true
+#| echo: true
+#| fig-height: 8
+#| fig-width: 10
+data$student <- rownames(data)
+
+longer_data <- pivot_longer(data,
+                            cols = colnames(data[, sapply(data, is.numeric)]),
+                            names_to = "variable",
+                            values_to = "value")
+
+order <- longer_data %>%
+                group_by(variable) %>% summarise(avg = mean(value)) %>%
+                arrange(desc(avg)) %>% pull(variable)
+
+
+longer_data$variable <- factor(longer_data$variable, levels = order)
+
+heatmap <- ggplot(longer_data, aes(x = variable, y = student, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "red") +
+  theme_void()
+
+ggplotly(heatmap) %>% config(displayModeBar = FALSE) %>% layout(legend = list(x = -1, y = 0.5))
+```
+
+The heatmap is ordered by average rating, revealing that questions such as "Listening to Music" and "Practicing Sports" score consistently high across the class, while "Lying" and "Acting" receive the lowest ratings. This suggests that our class has a predominantly musical and sports-oriented profile. My own responses align closely with the class average, which is consistent with what will be seen in the specific analysis.
+
+## Parallel Coordinates
+
+```{r}
+#| code-fold: true
+#| echo: true
+numeric_cols$`Degree Type` <- as.factor(data$`Degree Type`)
+
+numeric_cols <- numeric_cols %>% group_by(`Degree Type`) %>% summarise(across(where(is.numeric), mean))
+
+ggplotly(ggparcoord(numeric_cols,
+           columns = 2:(ncol(numeric_cols)),
+           groupColumn = "Degree Type",
+           scale = "globalminmax",
+           alphaLines = 1) +
+  theme_void()) %>% 
+  config(displayModeBar = FALSE)
+```
+
+Both groups have pretty similar answers. We can see small differences in "Degree", "Acting", "Painting" and "Other Arts". Students in the Double Degree prefer to work in "Industry". However, both groups follow a similar trend so we can say they both have a pretty similar profile. The values for each question for both groups was computed using the mean.
+
+The similarity between both groups could be explained by the fact that students in the same university, regardless of their degree, tend to share a similar background and lifestyle.
+
+# Specific analysis of the dataset
+
+In the specific part of this analysis I'm going to compare myself to others in the class to analyse where I am located in the feature space. Nevertheless, as we have high dimensionality, dimensionality reduction techniques such as PCA, T-sne or UMAP are going to be used to get more interpretable results.
+
+## PCA Elbow Plot
+
+```{r}
+#| code-fold: true
+#| echo: true
+
+numeric_cols <- data[, sapply(data, is.numeric)]
+
+pca <- prcomp(numeric_cols, scale. = TRUE)
+
+variance <- pca$sdev^2
+variance_pct <- variance / sum(variance) * 100
+cumulative_variance <- cumsum(variance_pct)
+
+elbow_data <- data.frame(
+  PC = 1:length(variance_pct),
+  variance = variance_pct,
+  cumulative = cumulative_variance
+)
+
+ggplotly(ggplot(elbow_data, aes(x = PC)) +
+  geom_line(aes(y = variance), color = "blue") +
+  geom_line(aes(y = cumulative), color = "red") +
+  geom_point(aes(y = variance), color = "blue") +
+  geom_point(aes(y = cumulative), color = "red") + 
+  annotate("point", x = 8, y = elbow_data$cumulative[8], size = 8, shape = 1, color = "red")+
+    theme_minimal())  %>% config(displayModeBar = FALSE)
+
+```
+
+The cumulative explained variance explained with two and three components is of 33.95% and 45.81%. This means that the following 2d projection of PCA is losing 66% of information, so we will have to be cautious with the results we get. To improve this 3D projections will be used to get an extra 11% of explained variance.
+
+The elbow at 7-8 components suggests that the dataset has high dimensionality, with no single dominant direction explaining most of the variance.
+
+## 2D Projection of PCA
+
+```{r}
+#| echo: true
+#| message: false
+#| warning: false
+#| code-fold: true
+
+
+# PCA coordinates
+pca_scores <- as.data.frame(pca$x)
+
+# Add student names (adjust column name to your dataset)
+pca_scores$name <- rownames(data)  # change this if needed
+
+# Your name
+my_name <- "Amaiur"
+comparison <- c("Airam","Markel","Paul")
+
+# Create highlight variable
+pca_scores$highlight <- ifelse(pca_scores$name == my_name, "Me",
+                        ifelse(pca_scores$name %in% comparison, "Friends", "Others"))
+
+
+loadings <- as.data.frame(pca$rotation[, 1:2])
+loadings$variable <- rownames(loadings)
+
+scale_factor <- max(abs(pca_scores[,1:2])) 
+loadings$PC1 <- loadings$PC1 * scale_factor
+loadings$PC2 <- loadings$PC2 * scale_factor
+
+pca_scores$text <- paste("Student:", pca_scores$name, 
+                          "<br>PC1:", round(pca_scores$PC1, 2), 
+                          "<br>PC2:", round(pca_scores$PC2, 2))
+
+ggplotly(
+  ggplot(pca_scores, aes(x = PC1, y = PC2, text = text)) +
+    geom_point(aes(color = highlight), size = 2) +
+    geom_text(data = pca_scores[pca_scores$name == my_name, ], 
+              aes(label = name), nudge_y = 0.15, nudge_x = 0.3) +
+    geom_segment(data = loadings, inherit.aes = FALSE,
+                 aes(x = 0, y = 0, xend = PC1, yend = PC2, text = variable),
+                 arrow = arrow(length = unit(0.2, "cm")), 
+                 color = "steelblue", alpha = 0.5) +
+    scale_color_manual(values = c("Me" = "red", "Friends" = "blue", "Others" = "black")) +
+    theme_minimal(),
+  tooltip = c("text")
+) %>% layout(showlegend = FALSE) %>% config(displayModeBar = FALSE)
+```
+
+This 2d biplot suggest that I'm grouped with others (I'm not an outlier). "Practicing Sports" defines me positively, which makes sense because I rated it with a 5. However, other variables I rated lower define me negatively such as "Reels" or "Painting". Remember this plot only explains 33.95% of the variance so it needs to be completed with the next plot.
+
+Airam, Markel and Paul are highlighted in blue in this plot and in the next ones because as we are going to see in the final similarity rankings they are the ones that are the most and the least similar to me.
+
+## 3D Projection of PCA
+
+```{r}
+#| code-fold: true
+#| echo: true
+
+plot_ly(pca_scores, 
+        x = ~PC1, y = ~PC2, z = ~PC3,
+        type = "scatter3d",
+        mode = "markers",
+        color = ~highlight,
+        colors = c("Me" = "red", "Others" = "black", "Friends" = "blue"),
+        text = ~paste("Student:", name, 
+              "<br>PC1:", round(PC1, 2),
+              "<br>PC2:", round(PC2, 2),
+              "<br>PC3:", round(PC3, 2)),
+        hoverinfo = "text") %>%
+  layout(showlegend = FALSE)
+```
+
+Compared to the 2D projection, both I and my classmates appear more clustered together in the 3D projection. This suggests that part of the separation seen in 2D was an effect of losing 66% of the variance. By capturing an additional 12%, this projection gives a more faithful representation of the actual feature space.
+
+## 3D TSNE Projection
+
+```{r}
+#| code-fold: true
+#| echo: true
+
+tsne <- Rtsne(numeric_cols, perplexity = 7, dims = 3)
+
+tsne_scores <- as.data.frame(tsne$Y)
+
+tsne_scores$name <- rownames(data)  
+
+my_name <- "Amaiur"
+comparison <- c("Airam","Markel","Paul")
+
+# Create highlight variable
+tsne_scores$highlight <- ifelse(tsne_scores$name == my_name, "Me",
+                        ifelse(tsne_scores$name %in% comparison, "Friends", "Others"))
+
+plot_ly(tsne_scores, 
+        x = ~V1, y = ~V2, z = ~V3,
+        type = "scatter3d",
+        mode = "markers",
+        color = ~highlight,
+        colors = c("Me" = "red", "Others" = "black", "Friends" = "blue"),
+        text = ~paste("Student:", name, 
+              "<br>V1:", round(V1, 2),
+              "<br>V2:", round(V2, 2),
+              "<br>V3:", round(V3, 2)),
+        hoverinfo = "text") %>%
+  layout(showlegend = FALSE)
+
+```
+
+Unlike PCA, t-SNE is a non-linear method that preserves local structure, meaning it groups together students that are truly similar and separates those that are not, regardless of global trends.
+
+Knowing this, compared with the students that are closest to me my profile is a bit different to the dense cluster. I am not an extreme outlier, but neither do I fit perfectly on the principal cluster.
+
+## 3D UMAP Projection
+
+```{r}
+#| code-fold: true
+#| echo: true
+
+umap <- umap(numeric_cols, n_neighbors = 7, n_components = 3, min_dist = 0.1)
+
+umap_scores <- as.data.frame(umap$layout)
+
+umap_scores$name <- rownames(data)  # change this if needed
+
+# Your name
+my_name <- "Amaiur"
+comparison <- c("Airam","Markel","Paul")
+
+# Create highlight variable
+umap_scores$highlight <- ifelse(umap_scores$name == my_name, "Me",
+                        ifelse(umap_scores$name %in% comparison, "Friends", "Others"))
+
+plot_ly(umap_scores, 
+        x = ~V1, y = ~V2, z = ~V3,
+        type = "scatter3d",
+        mode = "markers",
+        color = ~highlight,
+        colors = c("Me" = "red", "Others" = "black", "Friends" = "blue"),
+        text = ~paste("Student:", name, 
+              "<br>V1:", round(V1, 2),
+              "<br>V2:", round(V2, 2),
+              "<br>V3:", round(V3, 2)),
+        hoverinfo = "text") %>%
+  layout(showlegend = FALSE)
+```
+
+Unlike PCA, UMAP is a non-linear dimensionality reduction method that preserves both local and global structure, making it generally more faithful to the true shape of the data than t-SNE.
+
+In this projection I appear more separated from the main cluster than in both PCA and t-SNE, which reinforces the conclusion that locally my profile differs a bit from the rest of the class. The consistency between t-SNE and UMAP, both non-linear methods using the full information, suggests this separation is real rather than an effect of dimensionality reduction.
+
+## Similarity rankings
+
+```{r}
+#| code-fold: true
+#| echo: true
+
+
+dist_matrix <- as.matrix(dist(numeric_cols, method = "euclidean"))
+euclidean <- data.frame(
+  student = rownames(dist_matrix),
+  distance = dist_matrix[, "Amaiur"],
+  row.names = NULL
+) %>% filter(student != "Amaiur") %>% arrange(distance)
+
+
+dist_matrix <- as.matrix(dist(numeric_cols, method = "manhattan"))
+manhattan <- data.frame(
+  student = rownames(dist_matrix),
+  distance = dist_matrix[, "Amaiur"],
+  row.names = NULL
+) %>% filter(student != "Amaiur") %>% arrange(distance)
+
+dist_matrix <- as.matrix(dist(numeric_cols, method = "cosine"))
+cosine <- data.frame(
+  student = rownames(dist_matrix),
+  distance = dist_matrix[, "Amaiur"],
+  row.names = NULL
+) %>% filter(student != "Amaiur") %>% arrange(distance)
+
+
+rankings <- merge(merge(euclidean, manhattan, by = "student"), cosine, by = "student")
+
+rank_euclidean <- rankings %>% select(student, distance.x) %>% arrange(distance.x) %>% mutate(top = rank(distance.x, ties.method = "min"))
+rank_manhattan <- rankings %>% select(student, distance.y) %>% arrange(distance.y) %>% mutate(top = rank(distance.y, ties.method = "min"))
+rank_cosine <- rankings %>% select(student, distance) %>% arrange(distance) %>% mutate(top = rank(distance, ties.method = "min"))
+
+
+final <- cbind(rank_euclidean, rank_manhattan, rank_cosine)
+colnames(final) <- c("Student", "Euclidean", "Top", "Student", "Manhattan", "Top", "Student", "Cosine", "Top")
+knitr::kable(final)
+```
+
+This table shows three different distance metrics to measure how similar each student is to me. Across all three metrics, Airam, Markel and Oihan consistently appear at the top of the ranking, meaning they are the most similar to me regardless of the method used. On the other hand, Paul ranks last in all three, making him the most different student to me. The fact that the three metrics agree on these results reinforces their reliability. Ties in distance are assigned the same rank.
+
+## Comparison Parallel Coordinates (Most and least similar)
+
+```{r}
+#| code-fold: true
+#| echo: true
+# Select only numeric variables
+numeric_cols <- data[, sapply(data, is.numeric)]
+
+# Add student names as a column
+numeric_cols$student <- rownames(data)
+
+# Filter the students you want
+selected <- numeric_cols %>%
+  filter(student %in% c("Amaiur", "Airam", "Paul","Markel"))
+
+# Plot
+ggplotly(
+  ggparcoord(selected,
+             columns = 1:(ncol(selected)-1), # all numeric columns
+             groupColumn = "student",
+             scale = "globalminmax",
+             alphaLines = 1) +
+    theme_void()
+) %>% config(displayModeBar = FALSE)
+```
+
+As this plot is interactive. I strongly recommend to hide two students and to analyse the plot comparing each student one by one with each other.
+
+I can see that my responses are quite similar to Airam’s across many variables, which reinforces the idea that we have very close profiles. I also share several patterns with Markel, although there are a few variables where we differ slightly. In contrast, Paul’s responses diverge more clearly from mine in multiple dimensions. Overall, this confirms that I am closer to Airam and Markel, while Paul has a more distinct profile compared to mine.
+
+## Conclusions
+
+Throughout this analysis, different dimensionality reduction techniques have been used to locate myself in the classroom feature space. While PCA suggested I was relatively centered, the non-linear methods t-SNE and UMAP, which better capture complex structure in the data, consistently placed me somewhat apart from the main cluster.
+
+The similarity rankings confirm that Airam, Markel and Oihan are the most similar students to me across all three distance metrics, while Paul is consistently the most different.
+
+In terms of what defines my position, "Practicing Sports" characterizes me most positively, while lower ratings in variables such as "Reels" push me away from the main cluster.
+
+Finally, all projections only capture part of the total variance, so some information may have been lost. A higher number of components would be needed to fully represent this high-dimensional dataset.
