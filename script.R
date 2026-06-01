@@ -119,6 +119,31 @@ gap  <- gapminder
 #5. Si hay outliers, sesgos, grupos destacados o limitaciones.
 
 
+#############################################################
+
+
+#1. Understand the dataset
+#- rows, columns, variable types, missing values, duplicates
+
+#2. Start with one important numerical variable
+#- histogram, bar frequency, density plot
+
+#3. Look for possible explanations
+#- numerical vs numerical: scatter plot
+#- numerical vs categorical: boxplot or violin plot
+#- categorical vs categorical: stacked/grouped bars
+
+#4. Add visual detail
+#- color by group
+#- reorder categories
+#- use interactive plotly if useful
+
+#5. Close with a conclusion
+#- main pattern
+#- important variables
+#- limitations
+
+
 
 ####################
 # COUNTING AMOUNTS #
@@ -701,3 +726,4 @@ parcoords(
   alpha = 0.4,                   # Te sugiero subir el alpha a 0.4; 0.02 es demasiado invisible para 234 filas
   withD3 = TRUE
 )
+
